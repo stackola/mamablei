@@ -4,7 +4,7 @@
 
 | Topic | Decision |
 |---|---|
-| Model | **Blocks**: every closed shape is one acrylic pane; everything else is solid chrome. A block on top cuts into the blocks below, leaving one lead width of chrome. Lead lines split blocks. (Replaced the first \"lines partition the plane\" model on request.) |
+| Model | **Blocks**: every closed shape is one acrylic pane; everything else is solid chrome. A block on top cuts into the blocks below, leaving one lead width of chrome. Lead lines split blocks. (Replaced the first "lines partition the plane" model on request.) |
 | Templates | Presets (window grid, rosette, arch window, honeycomb, flower, diamonds) and a blank frame. Everything stays editable. |
 | Glass | Coloured acrylic, default 2 mm. |
 | Cut files | Laser SVG + DXF per colour, and a tiled 1:1 PDF on A4. |
@@ -16,7 +16,7 @@
 | Export | 3MF (one object per piece) + STL zip. |
 | UI | German, laptop + mouse, local only (`npm run dev`). |
 | Tools | Rectangle, circle, oval, triangle/regular polygon, arch/half circle, free polygon, lead line, paint bucket. Magnetic snapping at lead-width gaps, align & distribute, pack with lead gap, z-order. |
-| UX | Mom-friendly: labelled tools, essentials only, everything technical behind \"Mehr …\". |
+| UX | Mom-friendly: labelled tools, essentials only, everything technical behind "Mehr …". |
 | Preview | Finished (chrome + backlit acrylic), print parts, exploded. |
 
 ## Block model
