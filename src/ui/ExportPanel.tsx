@@ -30,6 +30,7 @@ export function FinishCard({
   buildError: string | null;
 }) {
   const [sheet, setSheet] = useState({ width: 300, height: 200 });
+  const [paperGap, setPaperGap] = useState(12);
   const base = safeFileName(design.name || 'entwurf');
   const can3d = !!build && ready && build.pieces.length > 0;
   const canCut = !!layout && layout.panes.length > 0;
@@ -79,12 +80,16 @@ export function FinishCard({
           3D-Druckdatei herunterladen
           <span>für Bambu Studio (.3mf)</span>
         </button>
-        <button className="primary alt" disabled={!canCut} onClick={wrap(() => download(makeTemplatePDF(layout!, design.palette, design.name || 'Entwurf'), `${base}-schablonen.pdf`, 'application/pdf'))}>
+        <button className="primary alt" disabled={!canCut} onClick={wrap(() => download(makeTemplatePDF(layout!, design.palette, design.name || 'Entwurf', { gap: paperGap }), `${base}-schnittvorlagen.pdf`, 'application/pdf'))}>
           Schnittvorlagen herunterladen
           <span>zum Ausdrucken auf A4 (.pdf, 1:1)</span>
         </button>
       </div>
       <More label="Weitere Dateien & Drucker" id="export">
+        <h4>Schnittvorlagen (PDF)</h4>
+        <FieldRow label="Abstand zwischen den Scheiben">
+          <NumberInput value={paperGap} step={1} min={0} max={50} onChange={setPaperGap} /> mm
+        </FieldRow>
         <h4>Laser-Zuschnitt (je Farbe)</h4>
         <FieldRow label="Plattengröße">
           <NumberInput value={sheet.width} step={10} min={50} onChange={(v) => setSheet({ ...sheet, width: v })} width={52} /> ×

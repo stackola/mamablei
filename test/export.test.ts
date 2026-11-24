@@ -46,6 +46,15 @@ describe('exports', () => {
     const pdf = makeTemplatePDF(layout, d.palette, 'Rosette');
     expect(strFromU8(pdf.slice(0, 5))).toBe('%PDF-');
 
+    for (const id of ['raster', 'waben', 'blume']) {
+      const dd = TEMPLATES.find((t) => t.id === id)!.make();
+      const g2 = new Gc();
+      const l2 = computeLayout(M, dd, g2).layout;
+      g2.dispose();
+      const p2 = makeTemplatePDF(l2, dd.palette, dd.name);
+      expect(strFromU8(p2.slice(0, 5))).toBe('%PDF-');
+      if (OUT) writeFileSync(`${OUT}/${id}.pdf`, p2);
+    }
     if (OUT) {
       writeFileSync(`${OUT}/rosette.3mf`, tmf);
       writeFileSync(`${OUT}/rosette.pdf`, pdf);

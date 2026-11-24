@@ -50,8 +50,10 @@ immer genau eine Bleibreite Chrom.
 - **STL (ZIP)**: ein STL pro Teil.
 - **Laser: SVG / DXF je Farbe**: Acrylzuschnitte pro Farbe auf Platten gepackt
   (rot = schneiden, blau = Nummer).
-- **Schablonen PDF (A4, 1:1)**: Übersichtsseite plus gekachelte 1:1-Seiten mit
-  nummerierten Scheiben. Mit 100 % drucken und den 50-mm-Balken nachmessen.
+- **Schnittvorlagen (PDF, A4, 1:1)**: eine Übersichtsseite (welche Nummer wohin gehört), danach jede
+  Scheibe einzeln mit viel Platz drumherum (Standard 12 mm, einstellbar unter „Mehr“), nach Farbe sortiert,
+  platzsparend gedreht. Scheiben größer als ein A4-Blatt werden auf mehrere Blätter verteilt.
+  Mit 100 % drucken und den 50-mm-Balken nachmessen.
 
 ## Druckhinweise
 

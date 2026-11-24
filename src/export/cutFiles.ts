@@ -163,8 +163,6 @@ export function makeLaserZip(layout: Layout, palette: GlassColor[], base: string
 const A4W = 210;
 const A4H = 297;
 const MARGIN = 10;
-const CW = A4W - 2 * MARGIN;
-const CH = A4H - 2 * MARGIN - 8; // room for footer
 
 function drawRings(doc: jsPDF, rings: Rings, map: (p: Vec2) => Vec2, style: 'S' | 'F' | 'FD' = 'S') {
   for (const r of rings) {
@@ -191,168 +189,246 @@ function lighten([r, g, b]: [number, number, number], k: number): [number, numbe
   return [r + (255 - r) * k, g + (255 - g) * k, b + (255 - b) * k].map(Math.round) as [number, number, number];
 }
 
-export function makeTemplatePDF(layout: Layout, palette: GlassColor[], title: string): Uint8Array {
+export interface TemplateOptions {
+  /** Free space between two templates (mm), room for scissors / saw. */
+  gap: number;
+}
+
+interface PdfItem {
+  pane: PaneInfo;
+  /** Pane outline turned to its tightest upright position (never mirrored). */
+  rings: Rings;
+  label: Vec2;
+  b: { minX: number; minY: number; maxX: number; maxY: number };
+  w: number;
+  h: number;
+}
+
+function rotateRings(rings: Rings, deg: number): Rings {
+  const a = (deg * Math.PI) / 180;
+  const c = Math.cos(a);
+  const sn = Math.sin(a);
+  return rings.map((r) => r.map(([x, y]) => [x * c - y * sn, x * sn + y * c] as Vec2));
+}
+
+/** Rotation (degrees) that gives the smallest bounding box, landscape first. */
+function bestRotation(rings: Rings, maxW: number, maxH: number): number {
+  const pts = rings.flat();
+  let best = 0;
+  let bestArea = Infinity;
+  for (let deg = 0; deg < 180; deg += 1) {
+    const a = (deg * Math.PI) / 180;
+    const c = Math.cos(a);
+    const sn = Math.sin(a);
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const [x, y] of pts) {
+      const rx = x * c - y * sn;
+      const ry = x * sn + y * c;
+      if (rx < minX) minX = rx;
+      if (rx > maxX) maxX = rx;
+      if (ry < minY) minY = ry;
+      if (ry > maxY) maxY = ry;
+    }
+    const area = (maxX - minX) * (maxY - minY);
+    if (area < bestArea - 1e-6) {
+      bestArea = area;
+      best = deg;
+    }
+  }
+  // prefer landscape, unless only portrait fits the page
+  const b = ringsBounds(rotateRings(rings, best));
+  const w = b.maxX - b.minX;
+  const h = b.maxY - b.minY;
+  if (h > w && h <= maxW && w <= maxH) best += 90;
+  else if (w > maxW && h <= maxW && w <= maxH) best += 90;
+  return best;
+}
+
+/** Item coordinates (y up) → paper (y down) with the item's top-left at (px, py). */
+function itemMap(it: PdfItem, px: number, py: number) {
+  return (q: Vec2): Vec2 => [px + q[0] - it.b.minX, py + (it.b.maxY - q[1])];
+}
+
+/**
+ * Paper templates: an overview page (where each numbered pane goes) followed
+ * by every pane as a separate 1:1 template with generous space around it, so
+ * a single print can be cut apart by hand. Sorted by colour.
+ */
+export function makeTemplatePDF(layout: Layout, palette: GlassColor[], title: string, opt: TemplateOptions = { gap: 12 }): Uint8Array {
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
   const colorOf = (id: string) => palette.find((c) => c.id === id) ?? { id, name: id, hex: '#cccccc' };
-  const all = [layout.frame[0], ...layout.panes.flatMap((p) => p.cut)];
-  const b = ringsBounds(all);
-  const W = b.maxX - b.minX;
-  const H = b.maxY - b.minY;
-  const cols = Math.max(1, Math.ceil(W / CW));
-  const rows = Math.max(1, Math.ceil(H / CH));
-  const ox = b.minX - (cols * CW - W) / 2;
-  const oy = b.maxY + (rows * CH - H) / 2; // top edge (y up)
-  const ROWS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const G = Math.max(0, opt.gap);
+  const PW = A4W - 2 * MARGIN; // usable width
+  const PH = A4H - 2 * MARGIN - 10; // usable height (footer below)
 
-  // --- overview page
+  // ---------------- overview page
+  const fb = ringsBounds(layout.frame);
+  const W = fb.maxX - fb.minX;
+  const H = fb.maxY - fb.minY;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
-  doc.text(`${title} – Glasschablonen 1:1`, MARGIN, MARGIN + 6);
+  doc.text(`${title} – Schnittvorlagen`, MARGIN, MARGIN + 6);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.text(
     [
-      `Format ${Math.round(W)} × ${Math.round(H)} mm · ${layout.panes.length} Scheiben · ${cols * rows} Schablonenseiten (${rows} Zeilen × ${cols} Spalten)`,
-      'Mit 100 % / „Originalgröße“ drucken (nicht „an Seite anpassen“). Den 50-mm-Balken nachmessen.',
-      'Schnittlinie = Außenkontur der Acrylscheibe (inkl. Falz, abzüglich Spiel). Seiten an den Eckmarken aneinanderlegen.',
+      `Fenster ${Math.round(W)} × ${Math.round(H)} mm · ${layout.panes.length} Scheiben. Diese Übersicht zeigt, wohin jede Nummer gehört.`,
+      'Mit 100 % / „Originalgröße“ drucken (nicht „an Seite anpassen“) und den 50-mm-Balken nachmessen.',
+      'Jede Schablone entlang der schwarzen Linie ausschneiden, auf Acryl in der angegebenen Farbe kleben und aussägen.',
     ],
     MARGIN,
     MARGIN + 13,
   );
   const ovTop = MARGIN + 30;
-  const ovH = 150;
-  const s = Math.min(CW / (cols * CW), ovH / (rows * CH));
-  const ovMap = (p: Vec2): Vec2 => [MARGIN + (p[0] - ox) * s, ovTop + (oy - p[1]) * s];
+  const ovH = 170;
+  const s = Math.min(PW / W, ovH / H);
+  const ox = MARGIN + (PW - W * s) / 2;
+  const ovMap = (q: Vec2): Vec2 => [ox + (q[0] - fb.minX) * s, ovTop + (fb.maxY - q[1]) * s];
+  doc.setFillColor(205, 210, 216);
+  doc.setDrawColor(90, 90, 90);
+  doc.setLineWidth(0.3);
+  drawRings(doc, layout.frame, ovMap, 'FD');
   doc.setLineWidth(0.1);
   for (const p of layout.panes) {
-    const c = hexRgb(colorOf(p.fill).hex);
-    doc.setFillColor(...lighten(c, 0.35));
-    doc.setDrawColor(60, 60, 60);
+    doc.setFillColor(...lighten(hexRgb(colorOf(p.fill).hex), 0.3));
     drawRings(doc, p.opening, ovMap, 'FD');
   }
-  doc.setDrawColor(0, 0, 0);
-  doc.setLineWidth(0.3);
-  drawRings(doc, layout.frame, ovMap);
-  doc.setFontSize(Math.max(4, Math.min(8, 40 * s)));
   doc.setTextColor(0, 0, 0);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(Math.max(5, Math.min(10, 60 * s)));
   for (const p of layout.panes) {
     const [x, y] = ovMap(p.label);
     doc.text(String(p.index), x, y, { align: 'center', baseline: 'middle' });
   }
-  // page grid
-  doc.setDrawColor(214, 51, 132);
-  doc.setLineWidth(0.2);
-  doc.setTextColor(214, 51, 132);
-  doc.setFontSize(9);
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const [x0, y0] = ovMap([ox + c * CW, oy - r * CH]);
-      doc.rect(x0, y0, CW * s, CH * s, 'S');
-      doc.text(`${ROWS[r % 26]}${c + 1}`, x0 + 1.5, y0 + 4);
-    }
-  }
-  doc.setTextColor(0, 0, 0);
-  // legend
-  let ly = ovTop + rows * CH * s + 10;
-  doc.setFont('helvetica', 'bold');
+  // colour list
+  let ly = ovTop + H * s + 10;
   doc.setFontSize(10);
   doc.text('Farben', MARGIN, ly);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   ly += 5;
+  const order = palette.map((c) => c.id);
   const groups = new Map<string, PaneInfo[]>();
   for (const p of layout.panes) {
     if (!groups.has(p.fill)) groups.set(p.fill, []);
     groups.get(p.fill)!.push(p);
   }
-  for (const [id, panes] of groups) {
+  const groupIds = [...groups.keys()].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+  for (const id of groupIds) {
+    const panes = groups.get(id)!;
     const c = colorOf(id);
     doc.setFillColor(...hexRgb(c.hex));
     doc.rect(MARGIN, ly - 3, 5, 4, 'F');
     const area = panes.reduce((a, p) => a + Math.abs(ringsArea(p.cut)), 0) / 100;
     const nums = panes.map((p) => p.index).join(', ');
-    const lines = doc.splitTextToSize(`${c.name}: ${panes.length} Stück, ca. ${area.toFixed(0)} cm² – Nr. ${nums}`, CW - 8) as string[];
+    const lines = doc.splitTextToSize(`${c.name}: ${panes.length} Stück, ca. ${area.toFixed(0)} cm² – Nr. ${nums}`, PW - 8) as string[];
     doc.text(lines, MARGIN + 7, ly);
     ly += 4.5 * lines.length + 1;
-    if (ly > A4H - MARGIN - 10) break;
+    if (ly > A4H - MARGIN - 12) break;
   }
 
-  // --- tile pages
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      doc.addPage();
-      const tx0 = ox + c * CW;
-      const ty1 = oy - r * CH;
-      const map = (p: Vec2): Vec2 => [MARGIN + (p[0] - tx0), MARGIN + (ty1 - p[1])];
-      // only panes touching this tile
-      const visible = layout.panes.filter((p) => {
-        const pb = ringsBounds(p.cut);
-        return pb.maxX >= tx0 - 1 && pb.minX <= tx0 + CW + 1 && pb.minY <= ty1 + 1 && pb.maxY >= ty1 - CH - 1;
-      });
-      doc.saveGraphicsState();
-      doc.rect(MARGIN, MARGIN, CW, CH, null);
-      doc.clip();
-      doc.discardPath();
-      // lead (light grey) for orientation
-      for (const p of visible) {
-        doc.setFillColor(...lighten(hexRgb(colorOf(p.fill).hex), 0.82));
-        drawRings(doc, p.cut, map, 'F');
+  // ---------------- template pages
+  const items: PdfItem[] = layout.panes.map((pane) => {
+    const deg = bestRotation(pane.cut, PW, PH);
+    const rings = rotateRings(pane.cut, deg);
+    const label = rotateRings([[pane.label]], deg)[0][0];
+    const b = ringsBounds(rings);
+    return { pane, rings, label, b, w: b.maxX - b.minX, h: b.maxY - b.minY };
+  });
+  items.sort((a, b) => order.indexOf(a.pane.fill) - order.indexOf(b.pane.fill) || b.h - a.h || a.pane.index - b.pane.index);
+  const normal = items.filter((it) => it.w <= PW && it.h <= PH);
+  const oversize = items.filter((it) => it.w > PW || it.h > PH);
+
+  const drawTemplate = (it: PdfItem, map: (q: Vec2) => Vec2) => {
+    const c = colorOf(it.pane.fill);
+    doc.setFillColor(...lighten(hexRgb(c.hex), 0.8));
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.35);
+    drawRings(doc, it.rings, map, 'FD');
+    const [x, y] = map(it.label);
+    const small = Math.min(it.w, it.h) < 18;
+    doc.setTextColor(0, 0, 0);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(small ? 8 : 14);
+    doc.text(String(it.pane.index), x, y - (small ? 0.8 : 1.5), { align: 'center', baseline: 'middle' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(small ? 5.5 : 8);
+    doc.text(c.name, x, y + (small ? 2 : 3.5), { align: 'center', baseline: 'middle' });
+  };
+
+  // shelf packing with generous gaps; small panes may fill gaps in earlier
+  // shelves of the same page (first fit)
+  interface Shelf {
+    y: number;
+    h: number;
+    x: number;
+  }
+  let shelves: Shelf[] | null = null;
+  const nextY = () => (shelves && shelves.length ? shelves[shelves.length - 1].y + shelves[shelves.length - 1].h + G : 0);
+  for (const it of normal) {
+    let spot = shelves?.find((sh) => sh.h >= it.h && sh.x + it.w <= PW) ?? null;
+    if (!spot) {
+      if (!shelves || nextY() + it.h > PH) {
+        doc.addPage();
+        shelves = [];
       }
-      doc.setDrawColor(150, 150, 150);
-      doc.setLineWidth(0.15);
-      for (const p of visible) drawRings(doc, p.opening, map);
-      doc.setDrawColor(0, 0, 0);
-      doc.setLineWidth(0.35);
-      for (const p of visible) drawRings(doc, p.cut, map);
-      doc.setLineWidth(0.25);
-      doc.setDrawColor(90, 90, 90);
-      drawRings(doc, layout.frame, map);
-      doc.setFontSize(10);
-      for (const p of visible) {
-        const [x, y] = map(p.label);
-        if (x < MARGIN - 5 || x > MARGIN + CW + 5 || y < MARGIN - 5 || y > MARGIN + CH + 5) continue;
-        doc.setFont('helvetica', 'bold');
-        doc.text(String(p.index), x, y - 1, { align: 'center', baseline: 'middle' });
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7);
-        doc.text(colorOf(p.fill).name, x, y + 3, { align: 'center', baseline: 'middle' });
-        doc.setFontSize(10);
-      }
-      doc.restoreGraphicsState();
-      // corner marks + border
-      doc.setDrawColor(214, 51, 132);
-      doc.setLineWidth(0.2);
-      doc.setLineDashPattern([2, 2], 0);
-      doc.rect(MARGIN, MARGIN, CW, CH, 'S');
-      doc.setLineDashPattern([], 0);
-      const L = 6;
-      for (const [x, y] of [[MARGIN, MARGIN], [MARGIN + CW, MARGIN], [MARGIN, MARGIN + CH], [MARGIN + CW, MARGIN + CH]] as Vec2[]) {
-        doc.line(x - L, y, x + L, y);
-        doc.line(x, y - L, x, y + L);
-      }
-      // footer
-      const label = `${ROWS[r % 26]}${c + 1}`;
-      doc.setTextColor(0, 0, 0);
-      doc.setFontSize(9);
-      doc.text(`Seite ${label}  ·  Zeile ${ROWS[r % 26]}, Spalte ${c + 1}  ·  ${title}`, MARGIN, A4H - MARGIN - 1);
-      const nb = [
-        r > 0 ? `oben: ${ROWS[(r - 1) % 26]}${c + 1}` : '',
-        c < cols - 1 ? `rechts: ${ROWS[r % 26]}${c + 2}` : '',
-      ]
-        .filter(Boolean)
-        .join('  ');
-      if (nb) doc.text(nb, MARGIN, A4H - MARGIN + 3.5);
-      // 50 mm scale bar
-      const bx = A4W - MARGIN - 50;
-      const by = A4H - MARGIN - 3;
-      doc.setLineWidth(0.4);
-      doc.setDrawColor(0, 0, 0);
-      doc.line(bx, by, bx + 50, by);
-      doc.line(bx, by - 1.5, bx, by + 1.5);
-      doc.line(bx + 50, by - 1.5, bx + 50, by + 1.5);
-      doc.setFontSize(7);
-      doc.text('50 mm', bx + 25, by - 1.2, { align: 'center' });
+      spot = { y: nextY(), h: it.h, x: 0 };
+      shelves!.push(spot);
     }
+    drawTemplate(it, itemMap(it, MARGIN + spot.x, MARGIN + spot.y));
+    spot.x += it.w + G;
+  }
+
+  // panes larger than a page: tiled across several sheets
+  for (const it of oversize) {
+    const cols = Math.ceil(it.w / PW);
+    const rows = Math.ceil(it.h / PH);
+    for (let r = 0; r < rows; r++) {
+      for (let cIdx = 0; cIdx < cols; cIdx++) {
+        doc.addPage();
+        const map0 = itemMap(it, MARGIN - cIdx * PW, MARGIN - r * PH);
+        doc.saveGraphicsState();
+        doc.rect(MARGIN, MARGIN, PW, PH, null);
+        doc.clip();
+        doc.discardPath();
+        drawTemplate(it, map0);
+        doc.restoreGraphicsState();
+        doc.setDrawColor(214, 51, 132);
+        doc.setLineWidth(0.2);
+        doc.setLineDashPattern([2, 2], 0);
+        doc.rect(MARGIN, MARGIN, PW, PH, 'S');
+        doc.setLineDashPattern([], 0);
+        doc.setTextColor(214, 51, 132);
+        doc.setFontSize(9);
+        doc.text(
+          `Große Scheibe ${it.pane.index}: Blatt ${r * cols + cIdx + 1} von ${rows * cols} (Zeile ${r + 1}, Spalte ${cIdx + 1}) – Blätter an der gestrichelten Linie aneinanderkleben`,
+          MARGIN,
+          MARGIN - 3,
+        );
+      }
+    }
+  }
+
+  // footers with page numbers + scale bar
+  const total = doc.getNumberOfPages();
+  for (let i = 2; i <= total; i++) {
+    doc.setPage(i);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text(`${title} · Schnittvorlagen · Seite ${i - 1} von ${total - 1}`, MARGIN, A4H - MARGIN);
+    const bx = A4W - MARGIN - 50;
+    const by = A4H - MARGIN - 1;
+    doc.setLineWidth(0.4);
+    doc.setDrawColor(0, 0, 0);
+    doc.line(bx, by, bx + 50, by);
+    doc.line(bx, by - 1.5, bx, by + 1.5);
+    doc.line(bx + 50, by - 1.5, bx + 50, by + 1.5);
+    doc.setFontSize(7);
+    doc.text('50 mm', bx + 25, by - 1.2, { align: 'center' });
   }
   return new Uint8Array(doc.output('arraybuffer'));
 }
