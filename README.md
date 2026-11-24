@@ -21,24 +21,27 @@ gespeichert. Mit **Speichern** lädt man ihn zusätzlich als `.bleiglas.json`-Da
 
 ## Bedienung (kurz)
 
+**Jede Form ist eine Acrylscheibe.** Alles dazwischen wird verchromt.
+Liegt eine Form auf einer anderen, schneidet sie sich dort aus, und dazwischen bleibt
+immer genau eine Bleibreite Chrom.
+
 | Werkzeug | Taste | |
 |---|---|---|
-| Auswählen / Verschieben | V | Klicken = auswählen, ziehen = verschieben, leere Fläche ziehen = Ansicht verschieben |
-| Linie | L | Endpunkte rasten an Raster und vorhandenen Linien ein |
-| Rechteck | R | aufziehen |
-| Kreis | K | von der Mitte aus aufziehen |
-| Oval | O | aufziehen |
-| Vieleck | P | Punkte klicken, Doppelklick / Enter schließt |
-| Farbeimer | F | Farbe rechts wählen, Fläche anklicken („Massiv“ = Chrom-Fläche) |
+| Auswählen | V | Klicken = auswählen, Shift+Klick oder Rahmen ziehen = mehrere |
+| Rechteck, Kreis, Oval | R, K, O | im Fenster aufziehen (Klick = Standardgröße, Shift = Proportionen) |
+| Dreieck, Sechseck | D, S | Eckenzahl lässt sich danach ändern |
+| Bogen, Halbkreis | B, H | Rund- oder Spitzbogen |
+| Einfärben | F | Farbe rechts wählen, Scheibe anklicken |
+| Mehr → Freie Form | P | Punkte klicken, Doppelklick = fertig |
+| Mehr → Bleilinie | L | teilt eine Form in zwei Scheiben |
 
-- **Jede Form ist eine Bleilinie.** Alle Flächen dazwischen werden Glas.
-- Mausrad = Zoom, `0` = alles zeigen, `Alt` gedrückt = Einrasten aus,
-  `Shift` beim Eckgriff = Seitenverhältnis halten.
-- `Strg+Z` / `Strg+Y` rückgängig / wiederholen, `Strg+D` duplizieren, `Entf` löschen,
-  Pfeiltasten = verschieben.
-- Rechts stehen alle Maße als Schieberegler. Die Profilskizze zeigt den Querschnitt eines Stegs.
-- **Hinweise** warnen z. B. vor zu schmalen Stegen hinten oder vor Bleiteilen, die
-  nicht mit dem Rahmen verbunden sind.
+- Formen **docken magnetisch** an ihre Nachbarn an, mit genau einer Bleibreite Abstand
+  (pinke Hilfslinie). `Alt` gedrückt halten schaltet das Einrasten aus.
+- **Duplizieren** (`Strg+D`) setzt die Kopie direkt daneben, im richtigen Abstand.
+- Mehrere Formen auswählen: ausrichten, „Aneinander ↔/↕“ (lückenlos mit Bleiabstand), verteilen.
+- Eine ausgewählte Form färbt man um, indem man einfach eine Farbe anklickt.
+- Mausrad = Zoom, Leertaste + Ziehen = Ansicht verschieben, `Strg+Z` = rückgängig.
+- Technische Einstellungen stecken hinter **„Mehr Einstellungen …“**.
 
 ## Export
 

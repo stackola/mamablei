@@ -2,7 +2,7 @@
 // cut shapes. Everything is computed with Manifold's CrossSection (Clipper2).
 import type { CrossSection, ManifoldToplevel } from 'manifold-3d';
 import type { Design, Params, Vec2 } from '../model/types';
-import { SOLID } from '../model/types';
+import { isBlock } from '../model/types';
 import {
   frameOutline,
   labelPoint,
@@ -64,6 +64,10 @@ export interface PaneInfo {
   index: number;
   /** Glass colour id. */
   fill: string;
+  /** The block this pane comes from. */
+  blockId: string;
+  /** True if lead lines split the block into several panes. */
+  split: boolean;
   /** Visible opening (front). */
   opening: Rings;
   /** Acrylic cut outline (opening grown by step width minus clearance). */
@@ -85,9 +89,6 @@ export interface Layout {
   lead: Rings;
   stem: Rings;
   panes: PaneInfo[];
-  /** Raw glass/solid regions between the leads (for the paint bucket). */
-  regions: { rings: Rings; fill: string }[];
-  solids: Rings[];
   slivers: Rings;
   islands: Rings[];
   warnings: LayoutWarning[];
@@ -146,57 +147,43 @@ export function computeLayout(M: ManifoldToplevel, design: Design, gc: Gc): { la
   const frameRing = frameOutline(design.frame);
   const frame = gc.t(new CrossSection([frameRing], 'Positive'));
   const inner = gc.t(frame.offset(-eff.frameWidth, 'Miter', 4));
-  const border = gc.t(frame.subtract(inner));
 
-  // Strokes of all shape outlines + lines.
-  const strokes: CrossSection[] = [];
-  for (const s of design.shapes) {
-    if (s.kind === 'line') {
-      const len = Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]);
-      if (len < 1e-6) continue;
-      strokes.push(gc.t(new CrossSection([segmentStroke(s.a, s.b, hw)], 'Positive')));
-      continue;
-    }
-    const outline = shapeOutline(s);
-    if (!outline) continue;
-    const p = gc.t(new CrossSection([outline], 'Positive'));
-    if (p.isEmpty()) continue;
-    const outer = gc.t(p.offset(hw, 'Round', 2, segs(hw)));
-    const innerS = gc.t(p.offset(-hw, 'Round', 2, segs(hw)));
-    strokes.push(gc.t(outer.subtract(innerS)));
-  }
   const empty = () => gc.t(frame.subtract(frame));
   const unionOf = (list: CrossSection[]) => (list.length ? gc.t(CrossSection.union(list)) : empty());
-  const strokeUnion = unionOf(strokes);
-  const lead0 = gc.t(border.add(gc.t(strokeUnion.intersect(frame))));
 
-  // Glass regions.
-  const glassAll = gc.t(frame.subtract(lead0));
-  const regions = glassAll.decompose().map((r) => gc.t(r));
+  // Lead lines (split blocks).
+  const strokes: CrossSection[] = [];
+  for (const s of design.shapes) {
+    if (s.kind !== 'line') continue;
+    const len = Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]);
+    if (len < 1e-6) continue;
+    strokes.push(gc.t(new CrossSection([segmentStroke(s.a, s.b, hw)], 'Positive')));
+  }
+  const lineUnion = unionOf(strokes);
 
-  const solids: Rings[] = [];
-  const rawRegions: { rings: Rings; fill: string }[] = [];
+  // Blocks, top first: each block is cut by everything above it (grown by
+  // one lead width) and by the lead lines.
   const sliverParts: CrossSection[] = [];
-  const openings: { cs: CrossSection; fill: string }[] = [];
+  const openings: { cs: CrossSection; fill: string; blockId: string }[] = [];
   const m = eff.minPaneWidth;
   const rc = eff.cornerRadius;
   const minArea = Math.max(1, m * m * 0.5);
+  const blocks = design.shapes.filter(isBlock);
+  let above: CrossSection | null = null;
 
-  for (const region of regions) {
-    const rings = toRings(region);
-    let fill = design.defaultFill;
-    for (let i = design.fills.length - 1; i >= 0; i--) {
-      const f = design.fills[i];
-      if (pointInRings([f.x, f.y], rings)) {
-        fill = f.fill;
-        break;
-      }
-    }
-    rawRegions.push({ rings, fill });
-    if (fill === SOLID) {
-      solids.push(rings);
-      continue;
-    }
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const b = blocks[i];
+    const outline = shapeOutline(b);
+    if (!outline) continue;
+    const shapeCS = gc.t(new CrossSection([outline], 'Positive'));
+    if (shapeCS.isEmpty()) continue;
+    let region = gc.t(shapeCS.intersect(inner));
+    if (above) region = gc.t(region.subtract(above));
+    if (strokes.length) region = gc.t(region.subtract(lineUnion));
+    const grown = gc.t(shapeCS.offset(W, 'Round', 2, segs(W)));
+    above = above ? gc.t(above.add(grown)) : grown;
+    if (region.isEmpty()) continue;
+
     let g = region;
     if (m > 0) {
       const eroded = gc.t(g.offset(-m / 2, 'Miter', 4));
@@ -208,13 +195,27 @@ export function computeLayout(M: ManifoldToplevel, design: Design, gc: Gc): { la
     }
     const removed = gc.t(region.subtract(g));
     if (removed.area() > 0.05) sliverParts.push(removed);
-    for (const comp of g.decompose()) {
-      gc.t(comp);
-      if (comp.area() < minArea) {
-        sliverParts.push(comp);
-        continue;
+    const comps = g.decompose().map((c) => gc.t(c));
+    const kept = comps.filter((c) => {
+      if (c.area() < minArea) {
+        sliverParts.push(c);
+        return false;
       }
-      openings.push({ cs: comp, fill });
+      return true;
+    });
+    for (const comp of kept) {
+      let fill = b.fill;
+      if (kept.length > 1) {
+        const rings = toRings(comp);
+        for (let k = design.fills.length - 1; k >= 0; k--) {
+          const f = design.fills[k];
+          if (pointInRings([f.x, f.y], rings)) {
+            fill = f.fill;
+            break;
+          }
+        }
+      }
+      openings.push({ cs: comp, fill, blockId: b.id });
     }
   }
 
@@ -254,10 +255,13 @@ export function computeLayout(M: ManifoldToplevel, design: Design, gc: Gc): { la
   const cuts = openings.map((o) => gc.t(gc.t(cutGrow > 0 ? o.cs.offset(cutGrow, 'Round', 2, segs(cutGrow)) : o.cs).simplify(0.002)));
 
   // Panes with numbering (top to bottom, left to right).
+  const perBlock = new Map<string, number>();
+  for (const o of openings) perBlock.set(o.blockId, (perBlock.get(o.blockId) ?? 0) + 1);
   const paneData = openings.map((o, i) => {
     const opening = toRings(o.cs);
     return {
       fill: o.fill,
+      blockId: o.blockId,
       opening,
       cut: toRings(cuts[i]),
       label: labelPoint(opening),
@@ -275,6 +279,8 @@ export function computeLayout(M: ManifoldToplevel, design: Design, gc: Gc): { la
   const panes: PaneInfo[] = order.map(({ p }, k) => ({
     index: k + 1,
     fill: p.fill,
+    blockId: p.blockId,
+    split: (perBlock.get(p.blockId) ?? 0) > 1,
     opening: p.opening,
     cut: p.cut,
     label: p.label,
@@ -296,7 +302,7 @@ export function computeLayout(M: ManifoldToplevel, design: Design, gc: Gc): { la
     warnings.push({
       code: 'islands',
       level: 'warn',
-      message: `${islands.length} Bleiteil${islands.length > 1 ? 'e schweben' : ' schwebt'} frei (nicht mit dem Rahmen verbunden). Mit einer Linie verbinden.`,
+      message: `${islands.length} Chromteil${islands.length > 1 ? 'e liegen' : ' liegt'} lose (z. B. der Ring um eine Form auf einer anderen Form). ${islands.length > 1 ? 'Sie werden' : 'Es wird'} nur von den Scheiben gehalten – gut verkleben oder mit einer Bleilinie zum Rand verbinden.`,
     });
   }
   const sliverUnion = sliverParts.length ? unionOf(sliverParts) : null;
@@ -305,11 +311,11 @@ export function computeLayout(M: ManifoldToplevel, design: Design, gc: Gc): { la
     warnings.push({
       code: 'slivers',
       level: 'info',
-      message: `Schmale Glasflächen (< ${fmt(m)} mm) werden massiv gefüllt.`,
+      message: `Sehr schmale Glasstellen (< ${fmt(m)} mm) werden mit Chrom gefüllt.`,
     });
   }
   if (!panes.length) {
-    warnings.push({ code: 'empty', level: 'info', message: 'Noch keine Glasflächen.' });
+    warnings.push({ code: 'empty', level: 'info', message: 'Noch keine Glasformen – links eine Form wählen und ins Bild ziehen.' });
   }
 
   const layout: Layout = {
@@ -317,8 +323,6 @@ export function computeLayout(M: ManifoldToplevel, design: Design, gc: Gc): { la
     lead: toRings(lead),
     stem: toRings(stem),
     panes,
-    regions: rawRegions,
-    solids,
     slivers,
     islands,
     warnings,

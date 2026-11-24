@@ -64,6 +64,63 @@ export function roundedRectPoints(w: number, h: number, r: number): Vec2[] {
   return pts;
 }
 
+/** Regular polygon with apex up, stretched so its bounding box is 2rx × 2ry. */
+export function ngonPoints(rx: number, ry: number, sides: number): Vec2[] {
+  const n = Math.max(3, Math.min(64, Math.round(sides)));
+  const raw: Vec2[] = [];
+  for (let i = 0; i < n; i++) {
+    const t = Math.PI / 2 + (i / n) * Math.PI * 2;
+    raw.push([Math.cos(t), Math.sin(t)]);
+  }
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const [x, y] of raw) {
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  const sx = (2 * rx) / (maxX - minX);
+  const sy = (2 * ry) / (maxY - minY);
+  return raw.map(([x, y]) => [(x - cx) * sx, (y - cy) * sy]);
+}
+
+/** Window arch inside a w × h box (round or pointed top). */
+export function archPoints(w: number, h: number, style: 'round' | 'pointed'): Vec2[] {
+  const hw = w / 2;
+  const hh = h / 2;
+  const pts: Vec2[] = [[-hw, -hh], [hw, -hh]];
+  if (style === 'round') {
+    const ry = Math.min(hw, h);
+    const ys = hh - ry;
+    const n = Math.max(8, Math.ceil(segmentsFor(Math.max(hw, ry)) / 2));
+    for (let i = 0; i <= n; i++) {
+      const t = (i / n) * Math.PI;
+      pts.push([Math.cos(t) * hw, ys + Math.sin(t) * ry]);
+    }
+  } else {
+    // equilateral pointed arch (radius = width), squashed if the box is low
+    const archH = w * Math.sin(Math.PI / 3);
+    const k = Math.min(1, h / archH);
+    const ys = hh - archH * k;
+    const n = Math.max(6, Math.ceil(segmentsFor(w) / 6));
+    for (let i = 0; i <= n; i++) {
+      const t = (i / n) * (Math.PI / 3);
+      pts.push([-hw + w * Math.cos(t), ys + w * Math.sin(t) * k]);
+    }
+    for (let i = 1; i <= n; i++) {
+      const t = (2 * Math.PI) / 3 + (i / n) * (Math.PI / 3);
+      pts.push([hw + w * Math.cos(t), ys + w * Math.sin(t) * k]);
+    }
+  }
+  // drop a duplicated point where the arc meets the side
+  return pts.filter((p, i) => i === 0 || Math.hypot(p[0] - pts[i - 1][0], p[1] - pts[i - 1][1]) > 1e-6);
+}
+
 /** Outline of a closed shape (CCW). Returns null for open shapes (lines). */
 export function shapeOutline(s: Shape): Vec2[] | null {
   switch (s.kind) {
@@ -71,6 +128,10 @@ export function shapeOutline(s: Shape): Vec2[] | null {
       return ensureCCW(rotateAround(roundedRectPoints(Math.abs(s.w), Math.abs(s.h), s.r), s.x, s.y, s.rotation));
     case 'ellipse':
       return ensureCCW(rotateAround(ellipsePoints(Math.abs(s.rx), Math.abs(s.ry)), s.x, s.y, s.rotation));
+    case 'ngon':
+      return ensureCCW(rotateAround(ngonPoints(Math.abs(s.rx), Math.abs(s.ry), s.sides), s.x, s.y, s.rotation));
+    case 'arch':
+      return ensureCCW(rotateAround(archPoints(Math.abs(s.w), Math.abs(s.h), s.style), s.x, s.y, s.rotation));
     case 'polygon':
       return s.points.length >= 3 ? ensureCCW(s.points.map((p) => [p[0], p[1]] as Vec2)) : null;
     case 'line':

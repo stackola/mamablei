@@ -1,16 +1,42 @@
 import { useEffect, useState, type ReactNode } from 'react';
 
-export function Section({ title, children, defaultOpen = true, right }: { title: string; children: ReactNode; defaultOpen?: boolean; right?: ReactNode }) {
-  const [open, setOpen] = useState(defaultOpen);
+export function Card({ title, children, right }: { title: string; children: ReactNode; right?: ReactNode }) {
   return (
-    <section className={`panel ${open ? 'open' : ''}`}>
-      <header onClick={() => setOpen(!open)}>
-        <span className="chev">{open ? '▾' : '▸'}</span>
+    <section className="card">
+      <header>
         <h3>{title}</h3>
-        {right && <span className="panel-right" onClick={(e) => e.stopPropagation()}>{right}</span>}
+        {right}
       </header>
-      {open && <div className="panel-body">{children}</div>}
+      <div className="card-body">{children}</div>
     </section>
+  );
+}
+
+/** Hides advanced content behind a "Mehr …" toggle. */
+export function More({ children, label = 'Mehr Einstellungen', id }: { children: ReactNode; label?: string; id?: string }) {
+  const key = id ? `bleiglas.more.${id}` : null;
+  const [open, setOpen] = useState(() => {
+    try {
+      return key ? localStorage.getItem(key) === '1' : false;
+    } catch {
+      return false;
+    }
+  });
+  const toggle = () => {
+    setOpen(!open);
+    try {
+      if (key) localStorage.setItem(key, open ? '0' : '1');
+    } catch {
+      /* ignore */
+    }
+  };
+  return (
+    <div className={`more ${open ? 'open' : ''}`}>
+      <button className="more-btn" onClick={toggle}>
+        {open ? '▾ Weniger' : `▸ ${label} …`}
+      </button>
+      {open && <div className="more-body">{children}</div>}
+    </div>
   );
 }
 
@@ -76,10 +102,10 @@ export function SliderRow({
   help?: string;
 }) {
   return (
-    <div className="slider-row" title={help}>
+    <div className="slider-row">
       <label>
         {label}
-        {help && <span className="help">?</span>}
+        {help && <span className="help-text">{help}</span>}
       </label>
       <div className="slider-line">
         <input
@@ -92,7 +118,7 @@ export function SliderRow({
           onPointerUp={() => onCommit?.()}
           onKeyUp={() => onCommit?.()}
         />
-        <NumberInput value={value} onChange={(v) => onChange(v, false)} step={step} min={0} width={58} />
+        <NumberInput value={value} onChange={(v) => onChange(v, false)} step={step} min={0} width={54} />
         <span className="unit">{unit}</span>
       </div>
     </div>

@@ -19,6 +19,8 @@ function scaled(d: Design, k: number): Design {
     switch (sh.kind) {
       case 'line': return { ...sh, a: [sh.a[0] * k, sh.a[1] * k], b: [sh.b[0] * k, sh.b[1] * k] };
       case 'rect': return { ...sh, x: sh.x * k, y: sh.y * k, w: sh.w * k, h: sh.h * k, r: sh.r * k };
+      case 'arch': return { ...sh, x: sh.x * k, y: sh.y * k, w: sh.w * k, h: sh.h * k };
+      case 'ngon': return { ...sh, x: sh.x * k, y: sh.y * k, rx: sh.rx * k, ry: sh.ry * k };
       case 'ellipse': return { ...sh, x: sh.x * k, y: sh.y * k, rx: sh.rx * k, ry: sh.ry * k };
       case 'polygon': return { ...sh, points: sh.points.map(([x, y]) => [x * k, y * k]) };
     }
@@ -28,7 +30,7 @@ function scaled(d: Design, k: number): Design {
 }
 
 describe('split', () => {
-  for (const id of ['raster', 'rosette', 'rauten']) {
+  for (const id of ['raster', 'rosette', 'waben']) {
     for (const through of [true, false]) {
       it(`${id} x2 through=${through}`, () => {
         const d = scaled(TEMPLATES.find((t) => t.id === id)!.make(), 2);

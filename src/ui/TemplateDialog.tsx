@@ -20,12 +20,13 @@ function Thumb({ d }: { d: Design }) {
           <path d={path(frame)} />
         </clipPath>
       </defs>
-      <path d={path(frame)} fill="#eef3f7" stroke="#555" strokeWidth={8} />
-      <g clipPath={`url(#clip-${d.name})`} stroke="#555" strokeWidth={5} fill="none">
+      <path d={path(frame)} fill="#b9c0c7" stroke="#6b7480" strokeWidth={4} />
+      <g clipPath={`url(#clip-${d.name})`} stroke="#b9c0c7" strokeWidth={5}>
         {d.shapes.map((s) => {
           if (s.kind === 'line') return <line key={s.id} x1={s.a[0]} y1={-s.a[1]} x2={s.b[0]} y2={-s.b[1]} />;
           const o = shapeOutline(s);
-          return o ? <path key={s.id} d={path(o)} /> : null;
+          const hex = d.palette.find((c) => c.id === s.fill)?.hex ?? '#ddd';
+          return o ? <path key={s.id} d={path(o)} fill={hex} /> : null;
         })}
       </g>
     </svg>
@@ -41,7 +42,7 @@ export function TemplateDialog({ onPick, onClose }: { onPick: (d: Design) => voi
           <h2>Neuer Entwurf</h2>
           <button className="mini" onClick={onClose}>✕</button>
         </header>
-        <p className="muted">Vorlage wählen – alles lässt sich danach frei verändern. Der aktuelle Entwurf wird ersetzt (vorher speichern!).</p>
+        <p className="muted">Eine Vorlage wählen – danach lässt sich alles frei verändern. Achtung: der jetzige Entwurf wird ersetzt, vorher ggf. speichern.</p>
         <div className="templates">
           {previews.map(({ t, d }) => (
             <button key={t.id} className="template" onClick={() => onPick(t.make())}>

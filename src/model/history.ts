@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Design } from './types';
+import { migrateDesign } from './defaults';
 
-const STORAGE_KEY = 'bleiglas.design.v1';
+const STORAGE_KEY = 'bleiglas.design.v2';
 const MAX_HISTORY = 200;
 
 interface H {
@@ -14,8 +15,7 @@ export function loadStoredDesign(): Design | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const d = JSON.parse(raw) as Design;
-    return d && d.version === 1 ? d : null;
+    return migrateDesign(JSON.parse(raw));
   } catch {
     return null;
   }

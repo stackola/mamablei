@@ -266,10 +266,14 @@ export function Preview3D({ build, palette, mode, lightColor, lightIntensity, bu
     }
 
     // Fit camera when the panel size changes notably.
-    const key = `${Math.round(size / 20)}`;
+    const host = hostRef.current;
+    const aspect = host ? Math.max(0.3, host.clientWidth / Math.max(1, host.clientHeight)) : 1;
+    const key = `${Math.round(max.x - min.x)}x${Math.round(max.y - min.y)}@${aspect.toFixed(2)}`;
     if (ctx.fittedFor !== key) {
       ctx.fittedFor = key;
-      const dist = (size * (exploded ? 1.4 : 1.15)) / (2 * Math.tan((ctx.camera.fov * Math.PI) / 360));
+      const tanHalf = Math.tan((ctx.camera.fov * Math.PI) / 360);
+      const pad = exploded ? 1.4 : 1.12;
+      const dist = Math.max(((max.y - min.y) * pad) / (2 * tanHalf), ((max.x - min.x) * pad) / (2 * tanHalf * aspect));
       ctx.controls.target.copy(center);
       ctx.camera.position.set(center.x, center.y - dist * 0.35, dist);
       ctx.camera.near = Math.max(1, dist / 100);

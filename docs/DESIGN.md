@@ -4,8 +4,8 @@
 
 | Topic | Decision |
 |---|---|
-| Model | Hybrid: every shape outline is a lead line; each enclosed area is glass (colour) or solid chrome (paint bucket). |
-| Templates | Presets (grid, rosette, sunrise, diamonds, flower) and a blank frame. Everything stays editable. |
+| Model | **Blocks**: every closed shape is one acrylic pane; everything else is solid chrome. A block on top cuts into the blocks below, leaving one lead width of chrome. Lead lines split blocks. (Replaced the first \"lines partition the plane\" model on request.) |
+| Templates | Presets (window grid, rosette, arch window, honeycomb, flower, diamonds) and a blank frame. Everything stays editable. |
 | Glass | Coloured acrylic, default 2 mm. |
 | Cut files | Laser SVG + DXF per colour, and a tiled 1:1 PDF on A4. |
 | Retention | Glue / silicone. Nothing extra is generated. |
@@ -15,8 +15,22 @@
 | Printing | Front face up, sharp step (≈ 1–1.5 mm overhang, no supports). A1 mini: 180 mm bed, 5 mm margin by default. |
 | Export | 3MF (one object per piece) + STL zip. |
 | UI | German, laptop + mouse, local only (`npm run dev`). |
-| v1 tools | Snap grid, line tool. Mirror/radial symmetry and SVG import come later. |
+| Tools | Rectangle, circle, oval, triangle/regular polygon, arch/half circle, free polygon, lead line, paint bucket. Magnetic snapping at lead-width gaps, align & distribute, pack with lead gap, z-order. |
+| UX | Mom-friendly: labelled tools, essentials only, everything technical behind \"Mehr …\". |
 | Preview | Finished (chrome + backlit acrylic), print parts, exploded. |
+
+## Block model
+
+```
+for each block from top to bottom:
+    pane = block ∩ frame-inner − grow(all blocks above, lead width) − lead lines
+    clean up: drop slivers narrower than "Mindestbreite Glas", round opening corners
+chrome = frame − all panes
+```
+
+A ring of chrome around a block that sits entirely inside another block is not
+connected to the frame. It is printed as a loose part held by the glued panes, and the
+app reports it as a notice.
 
 ## Profile
 

@@ -2,6 +2,11 @@
 // World coordinates: origin at the panel centre, x to the right, y UP
 // (the 2D editor flips y for display). The front (visible, chrome) side of
 // the printed part faces +z; the back (light side, glass inserted) is z = 0.
+//
+// Model: every closed shape is a BLOCK = one acrylic pane. Everything that is
+// not a block is solid chrome. Blocks later in the list lie on top and cut
+// into the blocks below (always leaving one lead width of chrome between).
+// Lines are lead lines that split blocks into separate panes.
 
 export type Vec2 = [number, number];
 
@@ -9,42 +14,69 @@ interface ShapeBase {
   id: string;
 }
 
-/** Closed shapes have a centre and a rotation (degrees, counter-clockwise). */
-export interface RectShape extends ShapeBase {
-  kind: 'rect';
+interface BlockBase extends ShapeBase {
+  /** Glass colour id. */
+  fill: string;
+  /** Centre. */
   x: number;
   y: number;
+  /** Rotation in degrees, counter-clockwise. */
+  rotation: number;
+}
+
+export interface RectShape extends BlockBase {
+  kind: 'rect';
   w: number;
   h: number;
-  /** Corner radius of the drawn outline (not the opening corner radius). */
+  /** Corner radius. */
   r: number;
-  rotation: number;
 }
 
-export interface EllipseShape extends ShapeBase {
+export interface EllipseShape extends BlockBase {
   kind: 'ellipse';
-  x: number;
-  y: number;
   rx: number;
   ry: number;
-  rotation: number;
 }
 
-/** A straight lead line between two points. */
+/** Regular polygon (triangle, hexagon …) stretched to fit its box. */
+export interface NgonShape extends BlockBase {
+  kind: 'ngon';
+  rx: number;
+  ry: number;
+  sides: number;
+}
+
+export type ArchStyle = 'round' | 'pointed';
+
+/** Window-arch: straight sides with a round or pointed top. */
+export interface ArchShape extends BlockBase {
+  kind: 'arch';
+  w: number;
+  h: number;
+  style: ArchStyle;
+}
+
+/** Free polygon block (absolute points). */
+export interface PolygonShape extends ShapeBase {
+  kind: 'polygon';
+  fill: string;
+  points: Vec2[];
+}
+
+/** A lead line between two points (splits blocks). */
 export interface LineShape extends ShapeBase {
   kind: 'line';
   a: Vec2;
   b: Vec2;
 }
 
-/** A closed polygon (absolute points). */
-export interface PolygonShape extends ShapeBase {
-  kind: 'polygon';
-  points: Vec2[];
-}
-
-export type Shape = RectShape | EllipseShape | LineShape | PolygonShape;
+export type BlockShape = RectShape | EllipseShape | NgonShape | ArchShape | PolygonShape;
+export type Shape = BlockShape | LineShape;
 export type ShapeKind = Shape['kind'];
+
+export function isBlock(s: Shape): s is BlockShape {
+  return s.kind !== 'line';
+}
 
 export type FrameKind = 'rect' | 'ellipse' | 'polygon';
 
@@ -65,19 +97,16 @@ export interface GlassColor {
   hex: string;
 }
 
-/** Paint-bucket seed: the region that contains (x, y) gets this fill. */
+/** Colour override for one pane of a block that a lead line split up. */
 export interface FillSeed {
   id: string;
   x: number;
   y: number;
-  /** A GlassColor id, or 'solid' for filled chrome. */
   fill: string;
 }
 
-export const SOLID = 'solid';
-
 export interface Params {
-  /** Visible width of the lead lines on the front (= gap between panes). */
+  /** Visible width of the lead between two panes (front). */
   leadWidth: number;
   /** Radius of the rounded top edge of the leads. leadWidth/2 = half round. */
   edgeRadius: number;
@@ -108,13 +137,13 @@ export interface Params {
 }
 
 export interface Design {
-  version: 1;
+  version: 2;
   name: string;
   frame: Frame;
+  /** Bottom to top. */
   shapes: Shape[];
+  /** Per-pane colour overrides (only needed for blocks split by lines). */
   fills: FillSeed[];
   palette: GlassColor[];
-  /** Colour id used for regions without a seed. */
-  defaultFill: string;
   params: Params;
 }
