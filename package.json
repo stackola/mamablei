@@ -1,0 +1,33 @@
+{
+  "name": "mamablei",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Web editor for 3D-printed faux leaded glass frames",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "earcut": "^3.2.4",
+    "fflate": "^0.8.3",
+    "jspdf": "^4.2.1",
+    "manifold-3d": "^3.5.5",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.187.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "typescript": "5.9",
+    "vite": "^7.3.8",
+    "vitest": "^3.2.7"
+  }
+}
